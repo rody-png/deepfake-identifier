@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Authentication</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.2.0/tf.min.js"></script>
+    <style>
+        :root {
+            --bg: #0a0a0b;
+            --card-bg: #141415;
+            --accent: #10a37f;
+            --accent-subtle: rgba(16, 163, 127, 0.1);
+            --text: #ffffff;
+            --text-secondary: #9ca3af;
+            --border: rgba(255, 255, 255, 0.1);
+            --error: #ef4444;
+            --positive: #10a37f;
+            --negative: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+            background: 
+                radial-gradient(circle at 0% 0%, rgba(16, 163, 127, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 100% 100%, rgba(16, 163, 127, 0.03) 0%, transparent 50%),
+                var(--bg);
+        }
+
+        main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            align-items: start;
+        }
+
+        @media (max-width: 1024px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .info-section {
+            padding: 40px 0;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(90deg, var(--text) 0%, #a8a8a8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .description {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            line-height: 1.7;
+            margin-bottom: 2rem;
+            max-width: 600px;
+        }
+
+        .feature-list {
+            display: grid;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1rem;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .feature-icon {
+            width: 24px;
+            height: 24px;
+            background: var(--accent-subtle);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+        }
+
+        .feature-text {
+            flex: 1;
+        }
+
+        .feature-title {
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .feature-description {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .detector-section {
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+        }
+
+        #modelStatus {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-bottom: 2rem;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 6px;
+            width: fit-content;
+        }
+
+        .upload-area {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.02);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-area:hover {
+            border-color: var(--accent);
+            background: var(--accent-subtle);
+        }
+
+        .upload-area::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(16, 163, 127, 0.3) 50%,
+                transparent 100%);
+            transform: translateX(-100%);
+            transition: transform 0.5s ease;
+        }
+
+        .upload-area:hover::before {
+            transform: translateX(100%);
+        }
+
+        #imageInput {
+            display: none;
+        }
+
+        .upload-button {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.75rem 1.5rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 1rem;
+        }
+
+        .upload-button:hover {
+            background: #0c8b6c;
+        }
+
+        #result {
+            margin-top: 2rem;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+        }
+
+        #result.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .result-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        #imagePreview {
+            width: 100%;
+            border-radius: 8px;
+            margin-top: 1.5rem;
+            display: none;
+        }
+
+        .confidence-track {
+            width: 100%;
+            height: 3px;
+            background: var(--border);
+            margin-top: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            border-radius: 2px;
+        }
+
+        .confidence-bar {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .analysis-label {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .analysis-value {
+            font-size: 1.5rem;
+            font-weight: 500;
+            margin-bottom: 1.5rem;
+        }
+
+        .analysis-value.authentic {
+            color: var(--positive);
+        }
+
+        .analysis-value.fake {
+            color: var(--negative);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--accent);
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.6s linear infinite;
+            margin-left: 0.5rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 8px var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="grid">
+            <div class="info-section">
+                <h1>AI Image Authentication</h1>
+                <p class="description">
+                    An advanced deep learning system trained to detect AI-generated and manipulated images. 
+                    Using state-of-the-art computer vision models, this tool analyzes visual patterns and artifacts 
+                    that are characteristic of synthetic media.
+                </p>
+
+                <div class="feature-list">
+                    <div class="feature-item">
+                        <div class="feature-icon">◊</div>
+                        <div class="feature-text">
+                            <div class="feature-title">Deep Learning Analysis</div>
+                            <div class="feature-description">
+                                Utilizes advanced neural networks trained on extensive datasets of authentic and AI-generated images
+                            </div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">∆</div>
+                        <div class="feature-text">
+                            <div class="feature-title">Real-Time Processing</div>
+                            <div class="feature-description">
+                                Performs instant analysis using TensorFlow.js, running entirely in your browser
+                            </div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">○</div>
+                        <div class="feature-text">
+                            <div class="feature-title">Privacy Focused</div>
+                            <div class="feature-description">
+                                All processing happens locally - your images never leave your device
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detector-section">
+                <h2>Image Analysis</h2>
+                <div id="modelStatus"></div>
+                
+                <div class="upload-area" id="dropZone">
+                    <input type="file" id="imageInput" accept="image/*" disabled>
+                    <p class="upload-text">Upload an image for authentication</p>
+                    <button class="upload-button">Select image</button>
+                </div>
+                
+                <div id="result"></div>
+                <img id="imagePreview" alt="Image preview">
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let model;
+        
+        async function loadModel() {
+            try {
+                model = await tf.loadLayersModel('model.json');
+                document.getElementById('modelStatus').innerHTML = 
+                    '<div class="status-dot"></div>System ready for analysis';
+                document.getElementById('imageInput').disabled = false;
+            } catch (error) {
+                console.error('Error loading model:', error);
+                document.getElementById('modelStatus').innerHTML = 
+                    `<div class="error">System initialization failed: ${error.message}</div>`;
+            }
+        }
+
+        loadModel();
+
+        async function processImage(file) {
+            const img = new Image();
+            const reader = new FileReader();
+
+            reader.onload = async function(e) {
+                img.src = e.target.result;
+                const preview = document.getElementById('imagePreview');
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+
+                document.getElementById('result').innerHTML = `
+                    <div class="result-card">
+                        <p style="color: var(--text-secondary)">Analyzing image<span class="loading"></span></p>
+                    </div>
+                `;
+                document.getElementById('result').classList.add('show');
+
+                img.onload = async function() {
+                    try {
+                        const tensor = tf.browser.fromPixels(img)
+                            .resizeNearestNeighbor([224, 224])
+                            .toFloat()
+                            .expandDims();
+
+                        const prediction = await model.predict(tensor).data();
+                        
+                        const resultDiv = document.getElementById('result');
+                        const isReal = prediction[0] > 0.5;
+                        const confidence = Math.max(prediction[0], 1-prediction[0]) * 100;
+                        
+                        resultDiv.innerHTML = `
+                            <div class="result-card">
+                                <div class="analysis-label">Classification</div>
+                                <div class="analysis-value ${isReal ? 'authentic' : 'fake'}">
+                                    ${isReal ? 'Authentic Image' : 'Generated Image'}
+                                </div>
+                                <div class="analysis-label">Confidence</div>
+                                <div class="analysis-value">${confidence.toFixed(1)}%</div>
+                                <div class="confidence-track">
+                                    <div class="confidence-bar" style="width: ${confidence}%"></div>
+                                </div>
+                            </div>
+                        `;
+                        
+                        tensor.dispose();
+                    } catch (error) {
+                        console.error('Error processing image:', error);
+                        document.getElementById('result').innerHTML = 
+                            '<div class="error">Analysis failed. Please try again.</div>';
+                    }
+                };
+            };
+
+            reader.readAsDataURL(file);
+        }
+
+        const dropZone = document.getElementById('dropZone');
+        
+        dropZone.addEventListener('click', () => {
+            document.getElementById('imageInput').click();
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.style.borderColor = 'var(--accent)';
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.style.borderColor = 'var(--border)';
+            });
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            if (e.dataTransfer.files.length) {
+                processImage(e.dataTransfer.files[0]);
+            }
+        });
+
+        document.getElementById('imageInput').addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                processImage(e.target.files[0]);
+            }
+        });
+    </script>
+</body>
+</html>
